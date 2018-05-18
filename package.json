@@ -10,8 +10,8 @@
     "compile": "rm -rf dist/* && babel . --out-dir dist --ignore node_modules,dist --source-maps",
     "flow": "flow check --show-all-errors | flow-result-checker",
     "lint": "eslint App.js src/",
-    "test": "yarn lint && yarn flow",
-    "prepare": "npm run compile && install-self-peers -- --ignore-scripts"
+    "test": "npm run lint && npm run flow",
+    "prepare": "npm run compile && install-self-peers --npm --ignore-scripts"
   },
   "repository": {
     "type": "git",
@@ -49,7 +49,7 @@
     "lodash": "^4.17.4"
   },
   "peerDependencies": {
-    "expo": "*",
+    "react-native-fs": "*",
     "react": "*",
     "react-native": "*"
   }

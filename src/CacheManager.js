@@ -1,13 +1,27 @@
 // @flow
 import * as _ from "lodash";
-import {FileSystem} from "expo";
+import FileSystem from "react-native-fs";
 import SHA1 from "crypto-js/sha1";
 
-const BASE_DIR = `${FileSystem.cacheDirectory}expo-image-cache/`;
+const BASE_DIR = `${FileSystem.CachesDirectoryPath}expo-image-cache/`;
+
+const getCacheEntry = async (uri: string): Promise<{ exists: boolean, path: string, tmpPath: string }> => {
+    const filename = uri.substring(uri.lastIndexOf("/"), uri.indexOf("?") === -1 ? uri.length : uri.indexOf("?"));
+    const ext = filename.indexOf(".") === -1 ? ".jpg" : filename.substring(filename.lastIndexOf("."));
+    const path = `${BASE_DIR}${SHA1(uri)}${ext}`;
+    const tmpPath = `${BASE_DIR}${SHA1(uri)}-${_.uniqueId()}${ext}`;
+    // TODO: maybe we don't have to do this every time
+    try {
+        await FileSystem.mkdir(BASE_DIR);
+    } catch (e) {
+        // do nothing
+    }
+    const exists = await FileSystem.exists(path);
+    return { exists, path, tmpPath };
+};
 
 export class CacheEntry {
-
-    uri: string
+    uri: string;
     path: string;
 
     constructor(uri: string) {
@@ -15,19 +29,22 @@ export class CacheEntry {
     }
 
     async getPath(): Promise<?string> {
-        const {uri} = this;
-        const {path, exists, tmpPath} = await getCacheEntry(uri);
+        const { uri } = this;
+        const { path, exists, tmpPath } = await getCacheEntry(uri);
         if (exists) {
             return path;
         }
-        await FileSystem.downloadAsync(uri, tmpPath);
-        await FileSystem.moveAsync({ from: tmpPath, to: path });
-        return path;
+        const { promise } = FileSystem.downloadFile({ fromUrl: uri, toFile: tmpPath });
+        const { statusCode } = await promise;
+        if (statusCode === 200) {
+            await FileSystem.moveFile(tmpPath, path);
+            return path;
+        }
+        return null;
     }
 }
 
 export default class CacheManager {
-
     static entries: { [uri: string]: CacheEntry } = {};
 
     static get(uri: string): CacheEntry {
@@ -38,23 +55,10 @@ export default class CacheManager {
     }
 
     static async clearCache(): Promise<void> {
-        await FileSystem.deleteAsync(BASE_DIR, { idempotent: true });
-        await FileSystem.makeDirectoryAsync(BASE_DIR);
+        const exists = await FileSystem.exists(BASE_DIR);
+        if (exists) {
+            await FileSystem.unlink(BASE_DIR);
+        }
+        await FileSystem.mkdir(BASE_DIR);
     }
 }
-
-const getCacheEntry = async (uri: string): Promise<{ exists: boolean, path: string, tmpPath: string }> => {
-    const filename = uri.substring(uri.lastIndexOf("/"), uri.indexOf("?") === -1 ? uri.length : uri.indexOf("?"));
-    const ext = filename.indexOf(".") === -1 ? ".jpg" : filename.substring(filename.lastIndexOf("."));
-    const path = `${BASE_DIR}${SHA1(uri)}${ext}`;
-    const tmpPath = `${BASE_DIR}${SHA1(uri)}-${_.uniqueId()}${ext}`;
-    // TODO: maybe we don't have to do this every time
-    try {
-        await FileSystem.makeDirectoryAsync(BASE_DIR);
-    } catch (e) {
-        // do nothing
-    }
-    const info = await FileSystem.getInfoAsync(path);
-    const {exists} = info;
-    return { exists, path, tmpPath };
-};
